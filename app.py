@@ -79,7 +79,7 @@ st.title("中国城市空气质量数据挖掘与智能分析")
 st.markdown("本系统集成 **机器学习聚类** 与 **多维统计分析**，从 6 个维度深度解读空气质量数据。")
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "📍 空间排名", "📈 时间趋势", "🔗 关联分析", "🔬 成分结构", "📊 质量分布", "🧪 [创新] AI聚类挖掘"
+    "📍 空间排名", "📈 时间趋势", "🔗 关联分析", "🔬 成分结构", "📊 质量分布", "🧪 AI聚类挖掘"
 ])
 
 # --- Tab 1: 空间排名 (已去除提示信息，图表全宽显示) ---
@@ -244,4 +244,5 @@ with tab6:
                 )
                 st.plotly_chart(fig_feat, use_container_width=True, config={'displayModeBar': False})
     else:
+
         st.error("数据不足，无法进行机器学习聚类。")
