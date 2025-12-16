@@ -168,7 +168,7 @@ with tab5:
 
 # --- Tab 6: 机器学习聚类 ---
 with tab6:
-    st.subheader("🧪 创新维度：基于 K-Means 的城市污染模式挖掘")
+    st.subheader("🧪 基于 K-Means 的城市污染模式挖掘")
     col_ml1, col_ml2 = st.columns([1, 3])
     
     with col_ml1:
@@ -246,3 +246,4 @@ with tab6:
     else:
 
         st.error("数据不足，无法进行机器学习聚类。")
+
