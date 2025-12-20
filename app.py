@@ -253,151 +253,168 @@ with tab5:
 # ==============================================================================
 # Tab 6: 机器学习聚类 K-Means
 # ==============================================================================
-with tab6:
-    st.subheader("🧪 ：基于K-Means的城市污染模式自动识别")
-    st.markdown("""
-    > **双视图解析**：
-    > * **🕸️ 雷达图**：看“体型”，快速识别是偏科（沙尘）还是全面发展（综合污染）。
-    > * **📊 柱状图**：看“身高”，了解具体的污染物浓度数值。
-    """)
+with tab6:  
+    st.subheader("🧪 聚类挖掘：城市污染模式深度拆解")
+  
 
     col_ml1, col_ml2 = st.columns([1, 3])
-    
+
     # --- 左侧：参数控制 ---
     with col_ml1:
-        # 范围扩大到 2-8，默认设为 5
-        n_clusters = st.slider("聚类数量 (K值)", 2, 8, 6) 
-        st.info("💡 **建议**：\n设置 K=5 或 6 可以最好地分离出“交通型”和“浮尘型”城市。")
-    
-    # --- 1. 数据准备 (严谨清洗) ---
-    ml_features = ['AQI', 'PM2.5', 'PM10', 'CO', 'NO2', 'SO2']
-    ml_features = [f for f in ml_features if f in df_pivot.columns]
-    
-    # 严谨模式：直接剔除缺失值
-    df_city_features = df_pivot.groupby('City')[ml_features].mean().dropna()
+        # 默认 K=4，刚好填满一行
+        n_clusters = st.slider("聚类数量 (K值)", 2, 8, 4) 
+       
+
+    # --- 1. 智能列名匹配 (已移除 CO) ---
+    # 【修改点】列表中删除了 'CO'
+    target_features = ['AQI', 'PM2.5', 'PM10', 'NO2', 'SO2'] 
+    ml_features = []
+    for t in target_features:
+        for c in df_pivot.columns:
+            if t.lower() == c.lower().strip(): 
+                ml_features.append(c)
+                break
+
+    if len(ml_features) < 3:
+        st.error(f"❌ 关键指标缺失！请检查 CSV 列名。当前找到: {ml_features}")
+        st.stop()
+
+    # --- 2. 数据准备 ---
+    df_city_features = df_pivot.groupby('City')[ml_features].mean()
+
+    # 【严谨清洗】直接剔除包含缺失值的城市
+    count_before = len(df_city_features)
+    df_city_features = df_city_features.dropna()
+    count_after = len(df_city_features)
+
+    st.caption(f"📉 数据清洗：原始 {count_before} -> 有效 **{count_after}** 个城市")
 
     if df_city_features.empty:
-        st.error("有效数据不足，无法进行聚类。")
+        st.error("❌ 所有城市均存在数据缺失，无法绘图。")
     else:
-        # --- 2. 训练模型 ---
+        # --- 3. 训练模型 ---
         scaler = StandardScaler()
         data_scaled = scaler.fit_transform(df_city_features)
         
         kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
         df_city_features['Cluster_ID'] = kmeans.fit_predict(data_scaled)
         
-        # --- 3. 智能打标逻辑 (Pro版：规则更具体) ---
+        # 计算中心点
         cluster_means = df_city_features.groupby('Cluster_ID')[ml_features].mean()
         
-        def get_cluster_name(row):
-            aqi = row.get('AQI', 0)
-            pm10 = row.get('PM10', 0)
-            pm25 = row.get('PM2.5', 0)
-            so2 = row.get('SO2', 0)
-            no2 = row.get('NO2', 0)
-            co = row.get('CO', 0)
+        # --- 4. 详细分类打标 (已移除 CO 相关逻辑) ---
+        def get_cluster_detail(row):
+            def get_val(name):
+                for k in row.index:
+                    if name.lower() in k.lower(): return row[k]
+                return 0
             
-            # 计算关键比值
-            ratio_pm = pm10 / (pm25 + 0.1) 
-
-            # --- 规则引擎 (优先级从高到低) ---
-            if aqi < 35: return "🍃 极优生态型"
-            if pm10 > 200 and ratio_pm > 2.5: return "🏜️ 强沙尘暴型"
-            if pm10 > 120 and ratio_pm > 2.0: return "🌪️ 浮尘扬沙型"
-            if so2 > 25: return "🏭 重工业燃煤型"
-            if so2 > 15 and co > 1.0: return "🏗️ 轻工业/取暖型"
-            if no2 > 45: return "🚗 交通拥堵型"
-            if aqi > 200: return "🔴 极重复合污染"
-            if aqi > 150: return "🟣 重度雾霾型"
-            if aqi > 100: return "🟠 轻度雾霾型"
-            if aqi < 70: return "🌿 清洁宜居型"
-            return "🔵 综合过渡型"
-
-        label_map = {}
-        for idx, row in cluster_means.iterrows():
-            label_map[idx] = get_cluster_name(row)
+            aqi = get_val('AQI')
+            pm10 = get_val('PM10')
+            pm25 = get_val('PM2.5')
+            so2 = get_val('SO2')
+            no2 = get_val('NO2')
+            # co = get_val('CO') # 【修改点】不再获取 CO
             
+            ratio_pm = pm10 / (pm25 + 0.1)
+            
+            if aqi < 40: return "🍃 极优生态"
+            if aqi < 70 and so2 < 10: return "🌿 清洁宜居"
+            if pm10 > 200 and ratio_pm > 2.0: return "🏜️ 强沙尘"
+            if pm10 > 120 and ratio_pm > 1.5: return "🌪️ 浮尘扬沙"
+            if so2 > 25: return "🏭 工业燃煤" 
+            # 【修改点】原逻辑需要 CO > 1.2，现在改为只看 SO2，或者归入工业过渡型
+            if so2 > 15: return "🏗️ 燃煤过渡" 
+            if no2 > 45: return "🚗 交通拥堵" 
+            if aqi > 150: return "🔴 极重复合"
+            if aqi > 100: return "🟠 轻度雾霾"
+            return "🔵 综合过渡"
+
+        label_map = {i: get_cluster_detail(row) for i, row in cluster_means.iterrows()}
         df_city_features['Label'] = df_city_features['Cluster_ID'].map(label_map)
 
-        # --- 4. 可视化：3D 总览图 ---
+        # --- 5. 可视化：3D 总览图 ---
         with col_ml2:
-            st.caption(f"有效分析城市: **{len(df_city_features)}** 个 | 模式细分度: **{n_clusters} 级**")
+            x_ax = ml_features[2] if len(ml_features)>2 else ml_features[0]
+            y_ax = ml_features[1] if len(ml_features)>1 else ml_features[0]
+            z_ax = ml_features[0]
+            
             fig_3d = px.scatter_3d(
                 df_city_features.reset_index(),
-                x='PM10', y='PM2.5', z='AQI',
+                x=x_ax, y=y_ax, z=z_ax,
                 color='Label',
                 hover_name='City',
-                title="城市污染模式 3D 精细聚类",
-                color_discrete_sequence=px.colors.qualitative.Bold,
-                labels={'Label': '细分模式'}
+                title="城市污染模式 3D 聚类分布",
+                color_discrete_sequence=px.colors.qualitative.Bold
             )
-            fig_3d.update_layout(margin=dict(l=0, r=0, b=0, t=30), height=450)
+            fig_3d.update_layout(margin=dict(l=0, r=0, b=0, t=30), height=300)
             st.plotly_chart(fig_3d, use_container_width=True)
 
-        # --- 5. 核心展示：雷达图 + 柱状图 (双图并列) ---
-        st.markdown("### 🧬 污染基因图谱 (双视图)")
+        # --- 6. 核心展示：详细特征柱状图 (四列布局) ---
+        st.markdown("### 📊 污染特征详细拆解")
+        st.markdown("下图展示了每一类城市的具体污染物浓度均值")
         
-        # 归一化 (0-1) 用于雷达图
-        df_norm = (cluster_means - cluster_means.min()) / (cluster_means.max() - cluster_means.min())
-        df_norm = df_norm.fillna(0)
-        
-        # 动态布局：如果K>4，分成两行显示
-        cols = st.columns(n_clusters) if n_clusters <= 4 else st.columns(4)
+        cols = st.columns(4)
         
         for i, (cluster_id, label) in enumerate(label_map.items()):
-            # 处理多行布局 (换行逻辑)
-            col_idx = i % 4
-            if i >= 4 and col_idx == 0: 
-                cols = st.columns(n_clusters - 4)
+            col_idx = i % 4 
+            if i >= 4 and col_idx == 0: cols = st.columns(4)
             
             with cols[col_idx]:
+                # --- 标题区 ---
                 st.markdown(f"**{label}**")
+                
                 cities = df_city_features[df_city_features['Cluster_ID'] == cluster_id].index.tolist()
-                
-                # 智能显示代表城市
-                priority = ['北京', '上海', '西安', '喀什地区', '三亚', '唐山', '武汉']
+                priority = ['北京', '上海', '西安', '喀什地区', '三亚', '唐山', '武汉', '郑州']
                 shown_cities = [c for c in cities if c in priority] + [c for c in cities if c not in priority]
-                st.caption(f"包含: {', '.join(shown_cities[:3])} 等")
+                st.caption(f"📍 {', '.join(shown_cities[:2])} 等{len(cities)}城")
                 
-                # --- 图表 A: 雷达图 (看形态) ---
-                r_vals = df_norm.loc[cluster_id].tolist(); r_vals += [r_vals[0]]
-                theta_vals = df_norm.columns.tolist(); theta_vals += [theta_vals[0]]
-                
-                # 智能配色
-                color_code = '#636EFA' 
-                if "沙尘" in label: color_code = '#FFA15A'
-                if "工业" in label: color_code = '#EF553B'
-                if "清洁" in label or "极优" in label: color_code = '#00CC96'
-                if "交通" in label: color_code = '#AB63FA'
-
-                fig_radar = go.Figure()
-                fig_radar.add_trace(go.Scatterpolar(
-                    r=r_vals, theta=theta_vals, fill='toself',
-                    line_color=color_code, opacity=0.6
-                ))
-                fig_radar.update_layout(
-                    polar=dict(radialaxis=dict(visible=False, range=[0, 1])),
-                    margin=dict(l=10, r=10, t=10, b=10),
-                    height=140,
-                    showlegend=False,
-                    title=dict(text="特征形态", font=dict(size=12), y=0.95)
-                )
-                st.plotly_chart(fig_radar, use_container_width=True, config={'displayModeBar': False})
-                
-                # --- 图表 B: 柱状图 (看数值 - 已加回) ---
+                # --- 数据分析区 ---
                 real_vals = cluster_means.loc[cluster_id]
+                max_feat = real_vals.idxmax()
+                max_val = real_vals.max()
+                
+                colors = []
+                for feat in real_vals.index:
+                    if 'PM' in feat: colors.append('#FFA15A') 
+                    elif 'SO' in feat: colors.append('#EF553B') 
+                    elif 'NO' in feat: colors.append('#AB63FA') 
+                    elif 'AQI' in feat: colors.append('#19D3F3') 
+                    else: colors.append('#636EFA')
+                
+                # --- 柱状图绘制 ---
                 fig_bar = px.bar(
-                    x=real_vals.index, y=real_vals.values,
-                    color=real_vals.index,
-                    color_discrete_sequence=px.colors.qualitative.Prism
+                    x=real_vals.index, 
+                    y=real_vals.values,
+                    text_auto='.0f', 
                 )
+                
+                fig_bar.update_traces(
+                    marker_color=colors,
+                    textfont_size=10, 
+                    textposition='outside', 
+                    cliponaxis=False 
+                )
+                
                 fig_bar.update_layout(
-                    showlegend=False, xaxis_tickangle=0,
-                    margin=dict(l=0, r=0, t=10, b=0),
-                    height=140, # 高度适中
-                    title=dict(text="均值浓度", font=dict(size=12), y=0.95),
-                    xaxis_title=None, yaxis_title=None
+                    title=dict(
+                        text=f"特征:{max_feat}",
+                        font=dict(size=12),
+                        y=0.95
+                    ),
+                    xaxis_title=None,
+                    yaxis_title=None,
+                    showlegend=False,
+                    height=220, 
+                    margin=dict(l=10, r=10, t=30, b=10),
+                    yaxis=dict(
+                        showticklabels=False, 
+                        showgrid=False, 
+                        range=[0, max_val * 1.3]
+                    ),
+                    xaxis=dict(
+                        tickfont=dict(size=10)
+                    )
                 )
-                # 隐藏Y轴刻度，保留网格线，界面更清爽
-                fig_bar.update_yaxes(showticklabels=False, showgrid=True)
+                
                 st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': False})
